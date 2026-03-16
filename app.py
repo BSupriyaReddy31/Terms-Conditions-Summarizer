@@ -1,58 +1,83 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from PyPDF2 import PdfReader
-
-# --- CONFIGURATION ---
 import os
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-st.set_page_config(page_title="T&C AI Summarizer", page_icon="⚖️")
 
+# --- PAGE SETUP ---
+st.set_page_config(page_title="T&C AI Summarizer", page_icon="⚖️", layout="wide")
+
+# --- SECURE API KEY LOADING ---
+# If running locally, it looks for an environment variable. 
+# If on Streamlit Cloud, it looks in "Secrets".
+api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+
+if not api_key:
+    st.error("API Key not found! Please add GEMINI_API_KEY to Streamlit Secrets or Environment Variables.")
+    st.stop()
+
+client = genai.Client(api_key=api_key)
+
+# --- HELPER FUNCTIONS ---
 def extract_text_from_pdf(file):
-    pdf_reader = PdfReader(file)
-    text = ""
-    for page in pdf_reader.pages:
-        text += page.extract_text()
-    return text
+    try:
+        pdf_reader = PdfReader(file)
+        text = "".join([page.extract_text() for page in pdf_reader.pages])
+        return text
+    except Exception as e:
+        st.error(f"Error reading PDF: {e}")
+        return None
 
 def analyze_tc(text):
-    model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"""
-    You are a specialized legal AI. Analyze the following Terms and Conditions text. 
-    Focus on consumer rights, data privacy, and potential "gotchas."
-    
-    Provide the analysis in this structure:
-    - **Executive Summary**: 2 sentences max.
-    - **Risk Score**: A score from 1 (Safe) to 10 (Dangerous).
-    - **The Red Flags**: List specific clauses that are anti-consumer (e.g., forced arbitration, data selling).
-    - **Data Privacy**: How is the data handled?
-    - **Cancellation**: How easy is it to leave?
-    
-    Text to analyze:
+    Analyze the following Terms and Conditions text as a consumer rights advocate.
+    Provide a clear, structured report:
+    1. **Summary**: What is this service?
+    2. **Risk Score (1-10)**: How dangerous is this for the user?
+    3. **Key Red Flags**: List specific clauses like data selling, forced arbitration, or hidden fees.
+    4. **Privacy & Data**: Who gets the user's data?
+    5. **Verdict**: Final recommendation (e.g., Safe, Proceed with Caution, Avoid).
+
+    Text:
     {text}
     """
-    response = model.generate_content(prompt)
-    return response.text
+    try:
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
+        return response.text
+    except Exception as e:
+        return f"AI Analysis failed: {e}"
 
-# --- UI DESIGN ---
-st.title("⚖️ AI Terms & Conditions Summarizer")
-st.markdown("Upload a PDF or paste the text to find out what you're actually signing.")
+# --- USER INTERFACE ---
+st.title("⚖️ Professional T&C Summarizer")
+st.info("Upload a legal document to uncover hidden risks using Gemini 1.5 Flash.")
 
-tab1, tab2 = st.tabs(["Upload PDF", "Paste Text"])
+col1, col2 = st.columns([1, 1])
 
-with tab1:
-    uploaded_file = st.file_uploader("Choose a T&C PDF file", type="pdf")
-    if uploaded_file and st.button("Analyze PDF"):
-        with st.spinner("Reading and analyzing..."):
-            raw_text = extract_text_from_pdf(uploaded_file)
-            analysis = analyze_tc(raw_text)
-            st.markdown(analysis)
+with col1:
+    st.subheader("Input Document")
+    source_option = st.radio("Choose Input Type:", ["Upload PDF", "Paste Text"])
+    
+    input_text = ""
+    
+    if source_option == "Upload PDF":
+        uploaded_file = st.file_uploader("Upload T&C PDF", type="pdf")
+        if uploaded_file:
+            input_text = extract_text_from_pdf(uploaded_file)
+    else:
+        input_text = st.text_area("Paste the legal text here...", height=300)
 
-with tab2:
-    user_text = st.text_area("Paste T&C text here...", height=300)
-    if user_text and st.button("Analyze Text"):
-        with st.spinner("Analyzing legal jargon..."):
-            analysis = analyze_tc(user_text)
-            st.markdown(analysis)
+    analyze_btn = st.button("🔍 Run Risk Analysis", use_container_width=True)
+
+with col2:
+    st.subheader("Analysis Results")
+    if analyze_btn and input_text:
+        with st.spinner("Gemini is reading the fine print..."):
+            result = analyze_tc(input_text)
+            st.markdown(result)
+    elif analyze_btn and not input_text:
+        st.warning("Please provide some text or a PDF first!")
 
 st.divider()
-st.caption("Disclaimer: This tool provides AI-generated summaries and does not constitute legal advice.")
+st.caption("Built for B.Tech Final Year Project - Powered by Gemini 1.5")
