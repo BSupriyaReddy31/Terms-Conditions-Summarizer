@@ -3,7 +3,8 @@ import google.generativeai as genai
 from PyPDF2 import PdfReader
 
 # --- CONFIGURATION ---
-genai.configure(api_key="YOUR_GEMINI_API_KEY")
+import os
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 st.set_page_config(page_title="T&C AI Summarizer", page_icon="⚖️")
 
 def extract_text_from_pdf(file):
