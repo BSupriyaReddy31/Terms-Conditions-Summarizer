@@ -42,7 +42,7 @@ def analyze_tc(text):
     """
     try:
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash", # Use 2.0 if you want the 2026 standard
             contents=prompt
         )
         return response.text
